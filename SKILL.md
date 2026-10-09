@@ -88,6 +88,17 @@ Graphify scans the corpus, extracts entities and relationships, clusters them, a
 
 This pipeline delegates to the `graphify` skill — invoke it directly. The graphify skill has the exact subagent prompts, cluster configurations, and output formats. Do not duplicate that here.
 
+Run graphify with `corpus/` as the working directory so outputs land in `<input>/corpus/graphify-out/`, which is where Stage 3 reads them.
+
+### Long scientific papers: extraction rules (learned the hard way)
+
+The graphify default of 20-25 files per subagent fails on long papers (300-5000 lines each). Subagents given ~6 full papers read only the abstracts and fill the rest from background knowledge. That violates graphify's "never invent an edge" rule. For paper corpora:
+
+1. **Chunk by words, not by file count.** Use ~3 papers (~40k words) per subagent.
+2. **Mandate full reading.** Add an addendum telling each subagent to Read every file to its last line in 400-line pieces. Forbid background-knowledge extraction, require `source_location` (section heading) on every node, and ask for "lines read / total lines" per file in the reply.
+3. **Use global IDs for shared entities.** Models, datasets, benchmarks, metrics and software that recur across papers (AlphaFold3, PDBbind, PoseBusters, RDKit, AutoDock Vina...) get a stem-free ID (`alphafold3`, `pdbbind`) so they merge across chunks. Paper-specific concepts keep `{stem}_{entity}`. Without this, cross-paper links never form.
+4. **Audit every chunk before merging.** Check nodes per source file (expect 25-50 per paper), distinct `source_location` values, and dangling endpoints. Send a shallow chunk back (SendMessage) rather than merging it.
+
 ### Stage 2 deliverable
 - `graphify-out/graph.json` with nodes, links/edges, communities, hyperedges
 - `graphify-out/GRAPH_REPORT.md`
@@ -116,9 +127,12 @@ graphify alone produces graph data, but Obsidian needs Markdown notes. The naive
 
 ### Steps
 
-1. **Run `graphify export obsidian --dir <input>/obsidian-vault`** to scaffold the basic structure (notes + canvas)
-2. **Copy original documents** into `obsidian-vault/_documentos_originais/` with safe filenames (replace `* " \ / < > : | ?` with `_`)
-3. **Rebuild each note** with this template:
+Run `scripts/run_pipeline.py <input> --skip-markitdown --skip-graphify` with **graphify's own Python interpreter** (for example `%APPDATA%\uv\tools\graphifyy\Scripts\python.exe`), because Stage 3 imports `graphify.export`. It performs:
+
+1. **Copy original documents first.** Copy top-level source files and every `corpus/*.md` into `obsidian-vault/_documentos_originais/`, named by basename with unsafe characters replaced by `_`. Never copy `corpus/`, `graphify-out/` or `obsidian-vault/` themselves. The old implementation did, so the vault copied itself into itself on every run.
+2. **Scaffold with graphify** by calling `graphify.export.to_obsidian` + `to_canvas`. This writes node notes, `_COMMUNITY_*` notes and `graph.canvas`.
+3. **Rewrite each node note in place**, keeping graphify's filename (`_dedup_node_filenames`). That keeps canvas cards and wikilinks resolving. Do NOT re-run `graphify export obsidian` afterwards, because it overwrites the enriched notes with stubs.
+4. Use this template for each rewritten note:
 
 ```markdown
 ---
@@ -161,7 +175,9 @@ source_file: "_documentos_originais/<safe_filename>"
 | Documento | [[_documentos_originais/<safe_filename>]] |
 ```
 
-4. **Build index.md** with:
+   Links use graphify's note filenames (`[[<note filename>|<label>]]`), not raw node IDs. Excerpts are blockquoted, with `#` headings and code fences escaped so they cannot break the note's structure.
+
+5. **Build index.md** with:
    - Statistics (nodes, edges, communities)
    - Most connected entities (top 10 by degree)
    - Community overview with 8 nodes per community
@@ -169,7 +185,9 @@ source_file: "_documentos_originais/<safe_filename>"
 
 ### Filename safety
 
-Obsidian file/link rules: no `* " \ / < > : | ?` characters allowed. Replace with `_` in both filenames and link paths. Use relative paths from the vault root (`_documentos_originais/...`), never absolute (`C:\...`).
+Obsidian file/link rules: no `* " \ / < > : | ?` characters allowed, and `# ^ [ ]` break wikilinks. Replace all of these with `_` in both filenames and link paths. Use relative paths from the vault root (`_documentos_originais/...`), never absolute (`C:\...`).
+
+Resolve `source_file` by **basename** (`Path(source_file).name`), never with `.replace("/", "__")`. On Windows the relative path uses backslashes, and the old string replace silently produced names that never matched the copied files, which left every "Conteúdo Relevante" section empty.
 
 ### Reading graph.json edges correctly
 
@@ -199,10 +217,13 @@ markitdown "file.pdf" > "corpus/file.pdf.md"
 graphify .                 # default run on current dir
 graphify ./corpus --obsidian  # if corpus is separate
 
-# Stage 3: Build enhanced Obsidian vault
-graphify export obsidian --dir ./obsidian-vault
-# Then run post-processing to embed content + copy docs (see scripts/run_pipeline.py)
+# Stage 3: Build enhanced Obsidian vault (graphify's interpreter; scaffolds + enriches in one pass)
+"$APPDATA/uv/tools/graphifyy/Scripts/python.exe" scripts/run_pipeline.py <source> --skip-markitdown --skip-graphify
 ```
+
+### Verify the vault
+
+After Stage 3, check that every `[[link]]` target exists in the vault and that every `graph.canvas` file card points to an existing note. Also confirm `_documentos_originais/` holds no `obsidian-vault_*` or `corpus_*` copies.
 
 ## Decision: when to re-run which stage
 
@@ -227,12 +248,13 @@ Idempotency: each stage checks if its output is fresher than its input before ru
 
 ## Failures and recovery
 
-- **Stage 1 fails:** install missing optional deps; report which file failed
+- **Stage 1 fails:** install missing optional deps; report which file failed. Large PDFs need a long timeout (an 8 MB paper takes ~45 s).
 - **Stage 2 fails:** re-run with `--force`; check graph health warnings
 - **Stage 3 fails:** verify doc copies completed; verify community IDs are strings
 
 ## Cost and time estimates
 
+- Reference run: 35 long papers (~450k words) took ~6 min of extraction with 9 parallel subagents, about 2.4M subagent tokens. The result was 1485 nodes, 3201 edges and 53 communities. Stage 3 took ~1 min.
 - 50-100 files, mostly docs: ~5 min Stages 1+2, ~1 min Stage 3
 - 500+ files: ~15 min Stages 1+2, ~3 min Stage 3
 - LLM token cost is from Stage 2 semantic extraction; Stage 1+3 are deterministic
