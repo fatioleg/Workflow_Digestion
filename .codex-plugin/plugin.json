@@ -1,0 +1,27 @@
+{
+  "name": "workflow-digestion",
+  "version": "1.0.0",
+  "description": "Pipeline MarkItDown -> Graphify -> Obsidian: converts mixed-format documents to Markdown, builds a knowledge graph and generates a navigable Obsidian vault with embedded source content.",
+  "author": { "name": "fatioleg", "url": "https://github.com/fatioleg" },
+  "homepage": "https://github.com/fatioleg/Workflow_Digestion",
+  "repository": "https://github.com/fatioleg/Workflow_Digestion",
+  "license": "MIT",
+  "keywords": ["markitdown", "graphify", "obsidian", "knowledge-graph", "documents", "vault"],
+  "skills": "./skills/",
+  "hooks": {},
+  "interface": {
+    "displayName": "Workflow Digestion",
+    "shortDescription": "Documents -> Markdown -> knowledge graph -> Obsidian vault",
+    "longDescription": "Pipeline MarkItDown -> Graphify -> Obsidian: converts mixed-format documents to Markdown, builds a knowledge graph and generates a navigable Obsidian vault with embedded source content.",
+    "developerName": "fatioleg",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "defaultPrompt": [
+      "Digest the documents in this folder into an Obsidian vault.",
+      "Apply markitdown, then graphify, then Obsidian to ./documents"
+    ],
+    "websiteURL": "https://github.com/fatioleg/Workflow_Digestion",
+    "brandColor": "#7C3AED",
+    "screenshots": []
+  }
+}

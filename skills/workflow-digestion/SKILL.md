@@ -31,6 +31,19 @@ Do NOT use for: code-only repos (just graphify is enough), pure transcription (j
 
 The pipeline runs three stages. Each stage depends on the previous one's output. If a stage fails, the user is told which stage and why, then prompted to continue or abort.
 
+## Host portability (Claude Code / Codex / Antigravity)
+
+This skill ships inside the `workflow-digestion` plugin. `scripts/run_pipeline.py` lives next to this `SKILL.md`; always resolve it relative to this skill's directory, never relative to the user's working directory.
+
+- **Stage 1** needs only the `markitdown` CLI. If a `markitdown` skill is available, it may be used instead.
+- **Stage 2** needs an LLM: the bare `graphify` CLI only extracts code, so on a document corpus it produces no `graph.json`. Use one of:
+  1. **Agent route (default, all hosts):** invoke the `graphify` skill on `corpus/`. Install it per host with `graphify install --platform claude|codex|antigravity`. The host's own model does the semantic extraction.
+  2. **Headless route:** `graphify extract ./corpus --backend claude|gemini|openai|...` with the matching API key set (e.g. `ANTHROPIC_API_KEY`). Writes `corpus/graphify-out/`.
+  If neither is available, stop after Stage 1 and tell the user; do not run Stage 3 on a missing graph. The extraction rules for long papers below apply whenever the host can spawn subagents.
+- **Stage 3** is deterministic Python and is identical on every host. After Stage 2, run `scripts/run_pipeline.py <source> --skip-markitdown --skip-graphify` with graphify's interpreter.
+
+Prerequisites: `pip install 'markitdown[all]'` and `uv tool install graphifyy` (or `pip install graphifyy`).
+
 ## Stage 1 - MarkItDown: convert source files to Markdown
 
 MarkItDown converts PDFs, DOCX, PPTX, XLSX, images (OCR), audio, HTML, and other formats to clean Markdown. The output goes into `corpus/` next to the original files.

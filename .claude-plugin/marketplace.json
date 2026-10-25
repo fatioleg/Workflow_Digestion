@@ -1,0 +1,14 @@
+{
+  "name": "workflow-digestion-marketplace",
+  "description": "Marketplace for the Workflow_Digestion plugin",
+  "owner": { "name": "fatioleg" },
+  "plugins": [
+    {
+      "name": "workflow-digestion",
+      "description": "Pipeline MarkItDown -> Graphify -> Obsidian: converts mixed-format documents to Markdown, builds a knowledge graph and generates a navigable Obsidian vault with embedded source content.",
+      "version": "1.0.0",
+      "source": "./",
+      "author": { "name": "fatioleg" }
+    }
+  ]
+}
